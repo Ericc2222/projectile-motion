@@ -1,0 +1,313 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f0f0f0;
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+}
+
+.game-container {
+    width: 800px;
+    background-color: white;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+    padding: 20px;
+}
+
+h1 {
+    text-align: center;
+    margin-bottom: 20px;
+    color: #333;
+}
+
+.game-area {
+    position: relative;
+    height: 400px;
+    border: 1px solid #ccc;
+    background: linear-gradient(to bottom, #87CEEB, #e6f7ff);
+    overflow: hidden;
+    margin-bottom: 20px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+}
+
+.sky {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+}
+
+.ground {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    height: 50px;
+    background: linear-gradient(to bottom, #8B4513, #8b5a2b);
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.2);
+    z-index: 1;
+}
+
+.ground::after {
+    content: "";
+    position: absolute;
+    top: -5px;
+    left: 0;
+    width: 100%;
+    height: 5px;
+    background-color: #0a7e07;
+}
+
+.cannon-container {
+    position: absolute;
+    bottom: 50px;
+    left: 50px;
+    width: 80px;
+    height: 70px;
+}
+
+.cannon {
+    position: relative;
+    bottom: 0;
+    width: 80px;
+    height: 40px;
+    background-color: #333;
+    background: linear-gradient(to bottom, #555, #222);
+    border-radius:: 5px 20px 5px 5px;
+    transform-origin: 20px bottom;
+    transform: rotate(45deg);
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    overflow: visible;
+    transition: transform 0.2s ease;
+    --cannon-recoil: 0px;
+}
+
+.cannon::before {
+    content: "";
+    position: absolute;
+    bottom: -20px;
+    left: 5px;
+    width: 50px;
+    height: 30px;
+    background: linear-gradient(to bottom, #666, #444);
+    border-radius: 10px 10px 0 0;
+    border: 3px solid #222;
+    border-bottom: none;
+    z-index: -1;
+    box-shadow: inset 0 5px 5px rgba(0, 0, 0, 0.2);
+}
+
+.cannon::after {
+    content: "";
+    position: absolute;
+    bottom: -5px;
+    left: 15px;
+    width: 20px;
+    height: 20px;
+    background-color: #ff3300;
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity 0.2s;
+    box-shadow: 0 0 15px #ff5500;
+    z-index: 2;
+}
+
+.cannon.firing::after {
+    opacity: 1;
+}
+
+.clown {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    background-color: #fff;
+    border-radius: 50%;
+    left: 80px;
+    bottom: 65px;
+    display: none;
+    z-index: 10;
+    overflow: visible;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+}
+
+/* Clown face features */
+.clown::before {
+    content: "";
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    width: 28px;
+    height: 14px;
+    background-color: #ff5555;
+    border-radius: 14px 14px 0 0;
+}
+
+.clown::after {
+    content: "";
+    position: absolute;
+    top: 16px;
+    left: 10px;
+    width: 20px;
+    height: 10px;
+    background-color: #ff0000;
+    border-radius: 0 0 10px 10px;
+}
+
+/* Clown eyes */
+.clown .eye-left, .clown .eye-right {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background-color: white;
+    border-radius: 50%;
+    border: 2px solid black;
+    top: 10px;
+}
+
+.clown .eye-left {
+    left: 10px;
+}
+
+.clown .eye-right {
+    right: 10px;
+}
+
+/* Clown hair */
+.clown .hair {
+    position: absolute;
+    top: -8px;
+    left: 5px;
+    width: 30px;
+    height: 15px;
+    background: #ff8800;
+    border-radius: 15px 15px 0 0;
+}
+
+.mattress {
+    position: absolute;
+    width: 120px; /* Increased width from 100px to 120px */
+    height: 30px;
+    background-color: #4169E1;
+    bottom: 50px;
+    right: 100px;
+    border: 2px solid #000080;
+    border-radius: 5px;
+    z-index: 5;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.mattress-detail {
+    position: absolute;
+    top: 5px;
+    left: 10px;
+    width: 100px;
+    height: 15px;
+    background: repeating-linear-gradient(
+        90deg,
+        #6495ED,
+        #6495ED 10px,
+        #4169E1 10px,
+        #4169E1 20px
+    );
+    border-radius: 3px;
+}
+
+.wind-indicator {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 60px;
+    height: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.wind-indicator::before {
+    content: "";
+    display: inline-block;
+    width: 40px;
+    height: 5px;
+    background-color: black;
+}
+
+.wind-indicator::after {
+    content: "";
+    display: inline-block;
+    width: 0;
+    height: 0;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-left: 10px solid black;
+    margin-left: -5px;
+}
+
+.controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+}
+
+label {
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+input[type="range"], select {
+    width: 100%;
+    padding: 5px;
+}
+
+#fire {
+    grid-column: span 2;
+    background-color: #ff4d4d;
+    color: white;
+    border: none;
+    padding: 10px;
+    font-size: 18px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+#fire:hover {
+    background-color: #ff3333;
+}
+
+.feedback {
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.stats {
+    padding: 10px;
+    background-color: #f9f9f9;
+    border-radius: 5px;
+    margin-top: 10px;
+}
+
+.success {
+    background-color: #dff0d8;
+    color: #3c763d;
+}
+
+.failure {
+    background-color: #f2dede;
+    color: #a94442;
+}

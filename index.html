@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clown Cannon</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="game-container">
+        <h1>Clown Cannon</h1>
+        
+        <div class="game-area">
+            <div class="sky"></div>
+            <div class="cannon-container">
+                <div class="cannon" id="cannon"></div>
+            </div>
+            <div class="clown" id="clown">
+                <div class="eye-left"></div>
+                <div class="eye-right"></div>
+                <div class="hair"></div>
+            </div>
+            <div class="mattress" id="mattress">
+                <div class="mattress-detail"></div>
+            </div>
+            <div class="ground"></div>
+            <div class="wind-indicator" id="wind-indicator"></div>
+        </div>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="angle">Angle (0-90°): <span id="angle-value">45</span>°</label>
+                <input type="range" id="angle" min="0" max="90" value="45">
+            </div>
+            
+            <div class="control-group">
+                <label for="power">Power (0-100): <span id="power-value">50</span></label>
+                <input type="range" id="power" min="0" max="100" value="50">
+            </div>
+            
+            <div class="control-group">
+                <label for="wind">Wind Speed (-10 to 10 m/s): <span id="wind-value">0</span> m/s</label>
+                <input type="range" id="wind" min="-10" max="10" value="0">
+            </div>
+            
+            <div class="control-group">
+                <label for="mass">Clown Mass (1-20 kg): <span id="mass-value">10</span> kg</label>
+                <input type="range" id="mass" min="1" max="20" value="10">
+            </div>
+            
+            <div class="control-group">
+                <label for="gravity">Gravity:</label>
+                <select id="gravity">
+                    <option value="9.8">Earth (9.8 m/s²)</option>
+                    <option value="1.6">Moon (1.6 m/s²)</option>
+                    <option value="3.7">Mars (3.7 m/s²)</option>
+                </select>
+            </div>
+            
+            <button id="fire">Fire!</button>
+        </div>
+        
+        <div class="feedback" id="feedback">
+            <p>Adjust the controls and press Fire to launch the clown!</p>
+        </div>
+        
+        <div class="stats" id="stats"></div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>
