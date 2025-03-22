@@ -288,22 +288,23 @@ h1 {
     transform: rotate(25deg);
 }
 
-/* No CSS-based animation - JS controls all rotation */
-
-/* The flying class is only for styling, no animation */
-.clown.flying {
-    /* Empty - all animation controlled by JS */
+/* Completely removed animation - now using JS to control spinning */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
-/* The stopped class ensures all animations are completely off */
+/* Removed automatic animation - will be applied via JS only */
+.clown.flying {
+    /* No automatic animation here anymore */
+}
+
+/* This is the final class to force an absolute stop */
 .clown.stopped {
     animation: none !important;
     -webkit-animation: none !important;
     transform: rotate(0deg) !important;
     transition: none !important;
-    -webkit-transition: none !important;
-    -moz-transition: none !important;
-    -o-transition: none !important;
 }
 
 /* Trajectory dots */

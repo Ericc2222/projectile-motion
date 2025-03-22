@@ -1,0 +1,877 @@
+// DOM elements
+const cannonElement = document.getElementById('cannon');
+const clownElement = document.getElementById('clown');
+const mattressElement = document.getElementById('mattress');
+const windIndicatorElement = document.getElementById('wind-indicator');
+const feedbackElement = document.getElementById('feedback');
+const statsElement = document.getElementById('stats');
+
+// Input elements
+const angleInput = document.getElementById('angle');
+const powerInput = document.getElementById('power');
+const windInput = document.getElementById('wind');
+const massInput = document.getElementById('mass');
+const gravitySelect = document.getElementById('gravity');
+const fireButton = document.getElementById('fire');
+const soundToggle = document.getElementById('sound-toggle');
+
+// Display elements
+const angleValueElement = document.getElementById('angle-value');
+const powerValueElement = document.getElementById('power-value');
+const windValueElement = document.getElementById('wind-value');
+const massValueElement = document.getElementById('mass-value');
+const currentScoreElement = document.getElementById('current-score');
+const highScoreElement = document.getElementById('high-score');
+const hitsElement = document.getElementById('hits');
+const attemptsElement = document.getElementById('attempts');
+const currentLevelElement = document.getElementById('current-level');
+const targetScoreElement = document.getElementById('target-score');
+
+// Sound elements
+const cannonSound = document.getElementById('cannon-sound');
+const bounceSound = document.getElementById('bounce-sound');
+const crashSound = document.getElementById('crash-sound');
+const successSound = document.getElementById('success-sound');
+const levelUpSound = document.getElementById('level-up-sound');
+const whooshSound = document.getElementById('whoosh-sound');
+
+// Sound settings
+let soundEnabled = true;
+
+// Sound function
+function playSound(sound) {
+    if (soundEnabled) {
+        // Reset sound to beginning if it's already playing
+        sound.pause();
+        sound.currentTime = 0;
+        sound.play().catch(e => console.log("Error playing sound:", e));
+    }
+}
+
+// Sound toggle
+soundToggle.addEventListener('change', () => {
+    soundEnabled = soundToggle.checked;
+    
+    // Save preference to localStorage
+    localStorage.setItem('clownCannonSoundEnabled', soundEnabled);
+    
+    // Play a test sound when enabled
+    if (soundEnabled) {
+        playSound(successSound);
+    }
+});
+
+// Game parameters
+let angle = 45;
+let power = 50;
+let wind = 0;
+let mass = 10;
+let gravity = 9.8;
+let isAnimating = false;
+
+// Physics parameters
+let airResistance = 0.01; // Reduced for more realistic trajectories
+let rotationSpeed = 0;
+let windVariance = 0.1; // Reduced for more consistency
+let physicsTimeScale = 0.3; // Increased animation speed
+let trailFrequency = 15; // Fewer trajectory dots for faster animation
+let scaleFactor = 0.5; // Base scale factor - will be adjusted by power curve
+
+// Scoring system
+let score = 0;
+let highScore = 0;
+let hits = 0;
+let attempts = 0;
+let currentLevel = 1;
+let targetScores = [100, 250, 500, 750, 1000];
+
+// Load high score from local storage if available
+if (localStorage.getItem('clownCannonHighScore')) {
+    highScore = parseInt(localStorage.getItem('clownCannonHighScore'));
+    highScoreElement.textContent = highScore;
+}
+
+// Animation variables
+let animationId = null;
+let startTime = 0;
+let clownPosition = { x: 0, y: 0 };
+let initialVelocity = { x: 0, y: 0 };
+let currentVelocity = { x: 0, y: 0 };
+
+// Update input displays
+angleInput.addEventListener('input', () => {
+    angle = parseInt(angleInput.value);
+    angleValueElement.textContent = angle;
+    updateCannonRotation();
+});
+
+powerInput.addEventListener('input', () => {
+    power = parseInt(powerInput.value);
+    powerValueElement.textContent = power;
+});
+
+windInput.addEventListener('input', () => {
+    wind = parseInt(windInput.value);
+    windValueElement.textContent = wind;
+    updateWindIndicator();
+});
+
+massInput.addEventListener('input', () => {
+    mass = parseInt(massInput.value);
+    massValueElement.textContent = mass;
+});
+
+gravitySelect.addEventListener('change', () => {
+    gravity = parseFloat(gravitySelect.value);
+});
+
+// Fire the cannon
+fireButton.addEventListener('click', () => {
+    if (isAnimating) return;
+    
+    // Play cannon sound
+    playSound(cannonSound);
+    
+    // COMPLETELY REDESIGNED ANIMATION SYSTEM - no CSS animation
+    clownElement.style.display = 'block';
+    
+    // Remove all animation classes
+    clownElement.classList.remove('flying', 'stopped', 'bounce', 'squish');
+    
+    // Clear any remaining animation overrides
+    clownElement.style.animation = '';
+    clownElement.style.transform = '';
+    
+    // Force a browser reflow to clear any previous animations
+    void clownElement.offsetHeight;
+    
+    // Add flying class, but apply animation directly via JS
+    clownElement.classList.add('flying');
+    
+    // Add spinning animation directly with JS (no CSS animation)
+    clownElement.style.animation = 'spin 1.5s linear infinite';
+    
+    // Clear previous trajectory
+    trajectoryPoints = [];
+    
+    // Clear trajectory visuals
+    const existingDots = document.querySelectorAll('.trajectory-dot');
+    existingDots.forEach(dot => dot.remove());
+    const pathContainer = document.getElementById('trajectory-path');
+    if (pathContainer) pathContainer.innerHTML = '';
+    
+    // Calculate initial velocity components
+    // In our visual and physics system:
+    // - 0 degrees = cannon points right horizontally, clown launches right
+    // - 90 degrees = cannon points straight up, clown launches up
+    
+    // Convert angle to radians for calculations
+    const angleRad = angle * Math.PI / 180;
+    const velocityMagnitude = power * 1.2; // Power multiplier
+    
+    // COMPLETELY REVAMPED POWER CALCULATION
+    // At power 0: Just drops out of cannon (minimal velocity)
+    // At power 50: Perfect for hitting mattress at 45 degrees
+    // At power 100: Flies far beyond mattress
+    
+    // Calculate a better power curve that starts very low and scales up
+    // Use a quadratic curve for better control: ax² + bx + c
+    // Where x is the normalized power (0-1)
+    const normalizedPower = power / 100;  
+    
+    // Calculate dynamic scale factor based on power
+    // At power 0: Very low (0.05)
+    // At power 50: Medium (0.6) - tuned for mattress landing at 45°
+    // At power 100: High (1.5) - flies far
+    const dynamicScaleFactor = (1.45 * normalizedPower * normalizedPower) + (0.1 * normalizedPower) + 0.05;
+    
+    // Final velocity calculation applying the dynamic scale
+    initialVelocity = {
+        x: velocityMagnitude * Math.cos(angleRad) * dynamicScaleFactor,
+        y: velocityMagnitude * Math.sin(angleRad) * dynamicScaleFactor
+    };
+    
+    // Near-vertical angle correction (prevent perfectly vertical shots)
+    if (Math.abs(initialVelocity.x) < 0.1 && angle > 85) {
+        initialVelocity.x = 0.1; // Small horizontal component for near-vertical shots
+    }
+    
+    // Set current velocity equal to initial velocity
+    currentVelocity = {...initialVelocity};
+    
+    // Calculate rotation speed based on power and mass
+    rotationSpeed = (power / mass) * 0.5;
+    
+    // Set starting position at the end of cannon (the red tip)
+    const cannonLength = 80;
+    // We're using the same angle system here:
+    // 0° = right, 90° = up
+    
+    // Calculate position at the end of the cannon barrel
+    // For x: cos(0°) = 1, cos(90°) = 0
+    // For y: sin(0°) = 0, sin(90°) = 1
+    const cannonEndX = 100 + cannonLength * Math.cos(angleRad); // Cannon center is at (100,50)
+    const cannonEndY = 50 + cannonLength * Math.sin(angleRad); // Starting height = 50px from bottom (ground level)
+    
+    clownPosition = {
+        x: cannonEndX,
+        y: cannonEndY
+    };
+    
+    // Cannon firing effect
+    const cannonElement = document.getElementById('cannon');
+    cannonElement.style.transform = `rotate(-${angle}deg) translateX(5px)`;
+    
+    // Show cannon fire
+    cannonElement.classList.add('firing');
+    
+    // Add firing effect
+    cannonElement.style.setProperty('--cannon-recoil', '5px');
+    
+    // Reset cannon position after recoil
+    setTimeout(() => {
+        cannonElement.style.transform = `rotate(-${angle}deg)`;
+        cannonElement.style.setProperty('--cannon-recoil', '0px');
+        cannonElement.classList.remove('firing');
+    }, 200);
+    
+    // Update clown position
+    updateClownPosition();
+    
+    // Start animation
+    isAnimating = true;
+    startTime = Date.now();
+    
+    // Play whoosh sound for flying clown
+    playSound(whooshSound);
+    
+    animationId = requestAnimationFrame(animateClown);
+    
+    // Clear feedback and stats
+    feedbackElement.innerHTML = '<p>Clown launched!</p>';
+    feedbackElement.className = 'feedback';
+    statsElement.innerHTML = '';
+    
+    // Increment attempts counter
+    attempts++;
+    attemptsElement.textContent = attempts;
+});
+
+// Update cannon rotation based on angle
+function updateCannonRotation() {
+    // Invert the angle to make 0° horizontal and 90° straight up
+    // This way, increasing angle rotates the cannon upward (counterclockwise)
+    cannonElement.style.transform = `rotate(-${angle}deg)`;
+}
+
+// Update wind indicator
+function updateWindIndicator() {
+    const rotation = wind < 0 ? 180 : 0; // Flip the arrow if wind is negative
+    const opacity = Math.abs(wind) / 10; // Scale opacity with wind strength
+    
+    windIndicatorElement.style.transform = `rotate(${rotation}deg)`;
+    windIndicatorElement.style.opacity = 0.2 + opacity * 0.8; // Minimum opacity of 0.2
+    
+    // Scale the size of the arrow based on wind strength
+    const scale = 0.5 + Math.abs(wind) / 10;
+    windIndicatorElement.style.transform = `rotate(${rotation}deg) scale(${scale})`;
+}
+
+// Update clown position on screen
+function updateClownPosition() {
+    // Position clown using top/left positioning
+    clownElement.style.left = `${clownPosition.x - 20}px`; // Center horizontally (40px width)
+    clownElement.style.top = `${400 - clownPosition.y - 40}px`; // Center vertically (40px height)
+}
+
+// Store trajectory points for consistent drawing
+let trajectoryPoints = [];
+let dotCounter = 0;
+
+// Animate the clown's trajectory
+function animateClown() {
+    const currentTime = Date.now();
+    const elapsedTime = (currentTime - startTime) / 1000; // seconds
+    
+    // Calculate time step for this frame, scaled down for slower motion
+    const dt = (1 / 60) * physicsTimeScale; // 60 fps target with time scaling
+    
+    // Apply variable wind - wind changes slightly during flight
+    const currentWind = wind + (Math.sin(elapsedTime * 2) * windVariance);
+    
+    // Apply air resistance - decreases velocity based on the current velocity
+    // Air resistance effect reduced for lower mass clowns
+    const airFactor = 1 - (airResistance / mass);
+    currentVelocity.x *= airFactor;
+    currentVelocity.y *= airFactor;
+    
+    // Apply wind force based on mass (lighter clowns are affected more)
+    const windForce = currentWind * (0.1 / mass) * physicsTimeScale;
+    currentVelocity.x += windForce;
+    
+    // Apply gravity (only affects y-component of velocity)
+    // Note: Negative sign because in our physics model, positive y is upward
+    // but we need gravity to pull downward
+    currentVelocity.y -= gravity * dt;
+    
+    // Store previous position for calculating trajectory
+    const prevPosition = { ...clownPosition };
+    
+    // Update position - use time scaling to slow down the visual motion
+    // In our coordinate system:
+    // - Positive x velocity moves clown to the right
+    // - Positive y velocity moves clown up on screen
+    clownPosition.x += currentVelocity.x * physicsTimeScale;
+    clownPosition.y += currentVelocity.y * physicsTimeScale;
+    
+    // Track trajectory for drawing
+    dotCounter++;
+    if (dotCounter >= trailFrequency) {
+        // Save trajectory point
+        trajectoryPoints.push({
+            x: clownPosition.x,
+            y: clownPosition.y
+        });
+        dotCounter = 0;
+        
+        // Draw the entire trajectory path
+        drawTrajectoryPath();
+    }
+    
+    updateClownPosition();
+    
+    // Check if clown has hit the ground or landed on mattress
+    const groundLevel = 50; // Regular ground level (50px from bottom)
+    const mattressHeight = 30; // Mattress is 30px tall
+    
+    // Get mattress position
+    const mattressRect = mattressElement.getBoundingClientRect();
+    const gameAreaRect = document.querySelector('.game-area').getBoundingClientRect();
+    const mattressLeft = mattressRect.left - gameAreaRect.left;
+    const mattressRight = mattressRect.right - gameAreaRect.left;
+    
+    // Check if the clown is above the mattress horizontally
+    const isAboveMattress = (clownPosition.x >= mattressLeft && 
+                             clownPosition.x <= mattressRight);
+                             
+    // If above mattress and hitting it, land on top of mattress
+    if (isAboveMattress && clownPosition.y <= (groundLevel + mattressHeight)) {
+        // Fix to ensure clown stays ON TOP of the mattress
+        clownPosition.y = groundLevel + mattressHeight; // Land on mattress top
+        
+        // Fix the height in the DOM as well to prevent falling through
+        const gameHeight = 400;
+        const mattressTopLevel = gameHeight - 50 - mattressHeight;
+        clownElement.style.top = `${mattressTopLevel - 40}px`; // Adjust for clown height
+        
+        // Use the bulletproof function to force stop all animation
+        forceStopClownAnimation();
+        
+        checkLanding();
+        return;
+    }
+    // Otherwise, check for ground collision
+    else if (clownPosition.y <= groundLevel) {
+        clownPosition.y = groundLevel; // Land on ground
+        
+        // Fix the height in the DOM to ensure proper ground landing
+        const gameHeight = 400;
+        const groundLevel = gameHeight - 50;
+        clownElement.style.top = `${groundLevel - 40}px`; // Adjust for clown height
+        
+        // Use the bulletproof function to force stop all animation
+        forceStopClownAnimation();
+        
+        checkLanding();
+        return;
+    }
+    
+    // Check if clown is out of bounds horizontally
+    if (clownPosition.x < 0 || clownPosition.x > 800) {
+        // Use the bulletproof function to force stop all animation
+        forceStopClownAnimation();
+        
+        feedbackElement.innerHTML = '<p>The clown flew out of bounds!</p>';
+        feedbackElement.className = 'feedback failure';
+        return;
+    }
+    
+    // Continue animation
+    animationId = requestAnimationFrame(animateClown);
+}
+
+// Draw a small dot at the trajectory point
+function drawTrajectoryDot(x, y, size = 4, opacity = 0.6) {
+    // Create a small div to represent the trajectory point
+    const dot = document.createElement('div');
+    dot.className = 'trajectory-dot';
+    dot.style.width = `${size}px`;
+    dot.style.height = `${size}px`;
+    dot.style.left = `${x}px`;
+    dot.style.top = `${400 - y - size/2}px`; // Convert to top positioning
+    dot.style.opacity = opacity;
+    
+    // Add the dot to the game area
+    document.querySelector('.game-area').appendChild(dot);
+    
+    return dot;
+}
+
+// Draw the entire trajectory path
+function drawTrajectoryPath() {
+    // Clear existing trajectory visuals
+    const existingDots = document.querySelectorAll('.trajectory-dot');
+    existingDots.forEach(dot => dot.remove());
+    
+    // Draw trajectory line
+    const pathContainer = document.getElementById('trajectory-path') || createPathContainer();
+    
+    // Draw a line connecting all trajectory points
+    if (trajectoryPoints.length > 1) {
+        let pathSVG = `<svg width="100%" height="100%" style="position:absolute; top:0; left:0; pointer-events:none;">
+            <path d="M `;
+            
+        // Add all points to the path
+        trajectoryPoints.forEach((point, i) => {
+            pathSVG += `${point.x} ${400 - point.y} `;
+            if (i === 0) pathSVG += " L ";
+        });
+        
+        pathSVG += `" stroke="rgba(255,0,0,0.5)" stroke-width="2" fill="none" />`;
+        
+        // Add dots at each point
+        trajectoryPoints.forEach(point => {
+            pathSVG += `<circle cx="${point.x}" cy="${400 - point.y}" r="3" fill="red" />`;
+        });
+        
+        pathSVG += `</svg>`;
+        pathContainer.innerHTML = pathSVG;
+    }
+    
+    // Also draw physical dots for the path (more visible)
+    trajectoryPoints.forEach((point, index) => {
+        // Vary the size and opacity based on recency
+        const recencyFactor = index / trajectoryPoints.length;
+        const size = 3 + recencyFactor * 3; // 3px to 6px
+        const opacity = 0.3 + recencyFactor * 0.6; // 0.3 to 0.9 opacity
+        
+        drawTrajectoryDot(point.x, point.y, size, opacity);
+    });
+}
+
+// Create container for trajectory path SVG
+function createPathContainer() {
+    const container = document.createElement('div');
+    container.id = 'trajectory-path';
+    container.style.position = 'absolute';
+    container.style.top = '0';
+    container.style.left = '0';
+    container.style.width = '100%';
+    container.style.height = '100%';
+    container.style.pointerEvents = 'none';
+    container.style.zIndex = '5';
+    document.querySelector('.game-area').appendChild(container);
+    return container;
+}
+
+// COMPLETELY REBUILT with brute force approach that will DEFINITELY stop the spinning
+function forceStopClownAnimation() {
+    // 1. Cancel animation frame to stop any in-progress animations
+    isAnimating = false;
+    cancelAnimationFrame(animationId);
+    
+    // 2. Get current position
+    const currentLeft = clownElement.offsetLeft;
+    const currentTop = clownElement.offsetTop;
+    
+    // 3. Clone the inner HTML to preserve appearance
+    const innerHTML = clownElement.innerHTML;
+    
+    // 4. Create a brand new element (this guarantees no animation inheritance)
+    const newClown = document.createElement('div');
+    newClown.id = 'clown';
+    newClown.className = 'clown stopped'; // Add the stopped class
+    newClown.innerHTML = innerHTML;
+    
+    // 5. Position the new element exactly where the old one was
+    newClown.style.cssText = `
+        position: absolute;
+        display: block;
+        left: ${currentLeft}px;
+        top: ${currentTop}px;
+        width: 40px;
+        height: 40px;
+        background-color: #fff;
+        border-radius: 50%;
+        z-index: 15;
+        overflow: visible;
+        box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+        animation: none !important;
+        -webkit-animation: none !important;
+        transform: rotate(0deg) !important;
+    `;
+    
+    // 6. Replace the old element with the new one
+    const parent = clownElement.parentNode;
+    parent.removeChild(clownElement);
+    parent.appendChild(newClown);
+    
+    // 7. Update the global reference
+    clownElement = document.getElementById('clown');
+    
+    console.log("SPINNING ANIMATION FORCIBLY STOPPED");
+}
+
+// Keep the old function as an alias to the new one
+function endAnimation() {
+    forceStopClownAnimation();
+}
+
+// Create a floating bonus point indicator
+function showBonusPoints(amount, x, y) {
+    const bonusElement = document.createElement('div');
+    bonusElement.className = 'bonus-indicator';
+    bonusElement.textContent = `+${amount}`;
+    bonusElement.style.left = `${x}px`;
+    bonusElement.style.top = `${y}px`;
+    document.querySelector('.game-area').appendChild(bonusElement);
+    
+    // Trigger animation
+    setTimeout(() => {
+        bonusElement.classList.add('show');
+    }, 10);
+    
+    // Remove element after animation completes
+    setTimeout(() => {
+        bonusElement.remove();
+    }, 1600);
+}
+
+// Check if the clown landed on the mattress
+function checkLanding() {
+    // Get mattress position and dimensions
+    const mattressRect = mattressElement.getBoundingClientRect();
+    const clownRect = clownElement.getBoundingClientRect();
+    
+    // Calculate horizontal distance traveled
+    const distanceTraveled = clownPosition.x;
+    
+    // First determine if clown is at mattress height or ground height
+    const clownY = parseInt(clownElement.style.top) + 40; // Bottom of clown
+    const gameHeight = 400;
+    const groundLevel = gameHeight - 50; // Same as CSS bottom: 50px
+    const mattressTopLevel = groundLevel - 30; // Mattress top (30px height)
+    
+    // Check if clown is at mattress height
+    const isAtMattressHeight = Math.abs(clownY - mattressTopLevel) < 10;
+    
+    // Calculate overlap percentage
+    let overlapWidth = 0;
+    
+    // Only calculate if there's some overlap
+    if (clownRect.right >= mattressRect.left && clownRect.left <= mattressRect.right) {
+        // Calculate the width of the overlap
+        const overlapLeft = Math.max(clownRect.left, mattressRect.left);
+        const overlapRight = Math.min(clownRect.right, mattressRect.right);
+        overlapWidth = overlapRight - overlapLeft;
+    }
+    
+    // Calculate percentage of clown width on mattress
+    const clownWidth = clownRect.width;
+    const overlapPercentage = (overlapWidth / clownWidth) * 100;
+    
+    // Require 90% of clown to be on mattress AND at mattress height for successful landing
+    const landedOnMattress = overlapPercentage >= 90 && isAtMattressHeight;
+    
+    // Calculate clown's center position relative to mattress center
+    const mattressCenter = (mattressRect.left + mattressRect.right) / 2;
+    const clownCenter = (clownRect.left + clownRect.right) / 2;
+    const distanceFromCenter = Math.abs(clownCenter - mattressCenter);
+    
+    // Calculate landing perfection (0 = perfect center, 1 = edge)
+    const mattressWidth = mattressRect.width;
+    const perfection = 1 - (distanceFromCenter / (mattressWidth / 2));
+    
+    // Apply landing animation - FIXED TO KEEP CLOWN VISIBLE
+    if (landedOnMattress) {
+        // Keep clown visible while stopping spin
+        clownElement.classList.remove('flying');
+        
+        // Ensure animation stops
+        clownElement.style.animation = 'none';
+        
+        // Force a repaint to clear animations
+        void clownElement.offsetHeight;
+        
+        // Add bounce animation
+        clownElement.classList.add('bounce');
+        
+        // Ensure clown is visible
+        clownElement.style.display = 'block';
+        mattressElement.classList.add('landing');
+        mattressElement.classList.add('highlight');
+        
+        // Play success bounce sound
+        playSound(bounceSound);
+        setTimeout(() => {
+            playSound(successSound);
+        }, 300);
+        
+        // Show overlay text indicating successful landing
+        const landingText = document.createElement('div');
+        landingText.className = 'landing-text success';
+        landingText.textContent = 'LANDING SUCCESS!';
+        document.querySelector('.game-area').appendChild(landingText);
+        
+        // Remove the landing text after animation
+        setTimeout(() => {
+            landingText.remove();
+        }, 2000);
+        
+        // Remove mattress effects after animation completes
+        setTimeout(() => {
+            mattressElement.classList.remove('landing');
+            mattressElement.classList.remove('highlight');
+        }, 1000);
+    } else {
+        // Keep clown visible while stopping spin
+        clownElement.classList.remove('flying');
+        
+        // Ensure animation stops
+        clownElement.style.animation = 'none';
+        
+        // Force a repaint to clear animations
+        void clownElement.offsetHeight;
+        
+        // Apply squish animation for crashing
+        clownElement.classList.add('squish');
+        
+        // Ensure clown is visible
+        clownElement.style.display = 'block';
+        
+        // Play crash sound
+        playSound(crashSound);
+        
+        // If clown is close but not 90% on mattress, show near miss
+        if (overlapPercentage > 0) {
+            const landingText = document.createElement('div');
+            landingText.className = 'landing-text failure';
+            landingText.textContent = `${Math.round(overlapPercentage)}% ON MATTRESS - NEED 90%`;
+            document.querySelector('.game-area').appendChild(landingText);
+            
+            // Remove the landing text after animation
+            setTimeout(() => {
+                landingText.remove();
+            }, 2000);
+        }
+    }
+    
+    // Calculate score
+    let pointsEarned = 0;
+    if (landedOnMattress) {
+        // Base points for landing (50-100 depending on precision)
+        const basePoints = Math.round(50 + perfection * 50);
+        
+        // Bonus points for difficulty
+        let bonusPoints = 0;
+        
+        // Gravity bonus - lower gravity is harder
+        if (gravity < 3) {
+            bonusPoints += 25;
+        } else if (gravity < 5) {
+            bonusPoints += 15;
+        }
+        
+        // Wind bonus - more wind is harder
+        const windBonus = Math.round(Math.abs(wind) * 3);
+        bonusPoints += windBonus;
+        
+        // Mass bonus - extreme masses are harder
+        if (mass < 5 || mass > 15) {
+            bonusPoints += 10;
+        }
+        
+        // Distance bonus - further distances are harder
+        if (distanceTraveled > 600) {
+            bonusPoints += 20;
+        } else if (distanceTraveled > 400) {
+            bonusPoints += 10;
+        }
+        
+        // Perfect landing bonus
+        let perfectBonus = 0;
+        if (perfection > 0.9) {
+            perfectBonus = 50;
+            feedbackElement.innerHTML = `<p>BULLSEYE! Perfect center landing. ${Math.round(overlapPercentage)}% on mattress!</p>`;
+        } else {
+            feedbackElement.innerHTML = `<p>SUCCESS! The clown landed with ${Math.round(overlapPercentage)}% on the mattress.</p>`;
+        }
+        
+        // Calculate total points
+        pointsEarned = basePoints + bonusPoints + perfectBonus;
+        
+        // Update score and hits
+        score += pointsEarned;
+        hits++;
+        
+        // Show floating bonus indicator
+        showBonusPoints(pointsEarned, clownRect.left, clownRect.top - 30);
+        
+        // Update UI
+        currentScoreElement.textContent = score;
+        hitsElement.textContent = hits;
+        
+        // Check for high score
+        if (score > highScore) {
+            highScore = score;
+            highScoreElement.textContent = highScore;
+            localStorage.setItem('clownCannonHighScore', highScore.toString());
+        }
+        
+        // Check for level up
+        if (score >= targetScores[currentLevel - 1] && currentLevel < targetScores.length) {
+            levelUp();
+        }
+        
+        feedbackElement.className = 'feedback success';
+    } else {
+        // Calculate distance from mattress
+        const missDistance = Math.min(
+            Math.abs(clownRect.right - mattressRect.left),
+            Math.abs(clownRect.left - mattressRect.right)
+        );
+        
+        // Award a few points for near misses
+        if (missDistance < 50) {
+            pointsEarned = 5;
+            score += pointsEarned;
+            currentScoreElement.textContent = score;
+            showBonusPoints(pointsEarned, clownRect.left, clownRect.top - 30);
+            feedbackElement.innerHTML = `<p>So close! ${Math.round(overlapPercentage)}% on mattress, but you need at least 90%.</p>`;
+        } else {
+            feedbackElement.innerHTML = '<p>Oops! The clown completely missed the mattress.</p>';
+        }
+        
+        feedbackElement.className = 'feedback failure';
+    }
+    
+    // Display stats
+    statsElement.innerHTML = `
+        <h3>Flight Statistics:</h3>
+        <p>Distance traveled: ${distanceTraveled.toFixed(2)} meters</p>
+        <p>Max height reached: ${calculateMaxHeight().toFixed(2)} meters</p>
+        <p>Impact velocity: ${Math.sqrt(currentVelocity.x*currentVelocity.x + currentVelocity.y*currentVelocity.y).toFixed(2)} m/s</p>
+        <p>Points earned: ${pointsEarned}</p>
+    `;
+}
+
+// Level up function
+function levelUp() {
+    currentLevel++;
+    currentLevelElement.textContent = currentLevel;
+    
+    // Play level up sound
+    playSound(levelUpSound);
+    
+    if (currentLevel <= targetScores.length) {
+        targetScoreElement.textContent = targetScores[currentLevel - 1];
+        
+        // Make the game harder with each level
+        switch(currentLevel) {
+            case 2:
+                // Level 2 - Reduce mattress size
+                mattressElement.style.width = '100px';
+                mattressElement.querySelector('.mattress-detail').style.width = '80px';
+                break;
+            case 3:
+                // Level 3 - More variable wind
+                windVariance = 0.5;
+                break;
+            case 4:
+                // Level 4 - Even smaller mattress and move it further
+                mattressElement.style.width = '80px';
+                mattressElement.querySelector('.mattress-detail').style.width = '60px';
+                mattressElement.style.right = '50px';
+                break;
+            case 5:
+                // Level 5 - Maximum challenge
+                windVariance = 1.0;
+                airResistance = 0.03;
+                break;
+        }
+        
+        // Show level up message
+        const levelUpMessage = document.createElement('div');
+        levelUpMessage.className = 'level-up-message';
+        levelUpMessage.innerHTML = `<h2>Level ${currentLevel}!</h2><p>The challenge increases!</p>`;
+        document.body.appendChild(levelUpMessage);
+        
+        // Remove message after 3 seconds
+        setTimeout(() => {
+            levelUpMessage.remove();
+        }, 3000);
+    }
+}
+
+// Calculate maximum height reached by the clown
+function calculateMaxHeight() {
+    // Using the formula: max height = (v0y)²/(2g)
+    const initialVelocityY = initialVelocity.y;
+    return (initialVelocityY * initialVelocityY) / (2 * gravity);
+}
+
+// Initialize the game
+function init() {
+    updateCannonRotation();
+    updateWindIndicator();
+    
+    // Position the mattress at the correct distance for power 50 at 45 degrees
+    // We're now using a fixed position for consistent gameplay
+    const mattressPosition = 550; // Positioned to match power 50 at 45 degrees
+    mattressElement.style.right = `${800 - mattressPosition}px`;
+    
+    // Initialize score displays
+    currentScoreElement.textContent = score;
+    highScoreElement.textContent = highScore;
+    hitsElement.textContent = hits;
+    attemptsElement.textContent = attempts;
+    currentLevelElement.textContent = currentLevel;
+    targetScoreElement.textContent = targetScores[currentLevel - 1];
+    
+    // Load sound preference from localStorage
+    if (localStorage.getItem('clownCannonSoundEnabled') !== null) {
+        soundEnabled = localStorage.getItem('clownCannonSoundEnabled') === 'true';
+        soundToggle.checked = soundEnabled;
+    }
+    
+    // Create placeholder audio files to prevent errors from missing files
+    createPlaceholderSounds();
+    
+    // CRITICAL SAFEGUARD: Make sure any spinning from a previous session is stopped
+    // This ensures the clown is never spinning when the game loads
+    clownElement.style.animation = 'none';
+    clownElement.style.transform = 'rotate(0deg)';
+    clownElement.classList.remove('flying');
+    clownElement.classList.add('stopped');
+}
+
+// Create placeholder blank 0.1s audio files to prevent errors
+function createPlaceholderSounds() {
+    // Check if actual sound files exist, if not create placeholders
+    const sounds = [
+        cannonSound, bounceSound, crashSound, 
+        successSound, levelUpSound, whooshSound
+    ];
+    
+    for (const sound of sounds) {
+        if (!sound.getAttribute('src') || sound.getAttribute('src') === '') {
+            // Create a new blob URL for an empty audio
+            const blob = new Blob([new Uint8Array([255, 227, 24, 196, 0, 0, 0, 3, 72, 1, 64, 0, 0, 4, 132, 16, 31, 227, 192, 225, 76, 255])], {type: 'audio/mpeg'});
+            const url = URL.createObjectURL(blob);
+            sound.src = url;
+        }
+    }
+}
+
+// Start the game
+init();
